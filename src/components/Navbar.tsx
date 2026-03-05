@@ -67,18 +67,25 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-white/5 bg-black/60 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 md:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-base font-semibold tracking-tight text-white">
-            <span className="mr-1 inline-flex h-2 w-2 rounded-full bg-red-500 shadow-[0_0_14px_rgba(248,113,113,0.9)]" />
-            UMD Notes
+    <nav className="sticky top-0 z-40 border-b border-white/6 bg-[#08090d]/88 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
+        <Link href="/" className="flex items-center gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
+            U
+          </span>
+          <span>
+            <span className="block text-sm font-semibold tracking-[-0.03em] text-white">
+              UMD Notes
+            </span>
+            <span className="block font-mono text-[10px] uppercase tracking-[0.22em] text-gray-500">
+              Shared study workspace
+            </span>
           </span>
         </Link>
 
         <div className="flex items-center gap-3">
           {displayName && (
-            <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-gray-200">
+            <span className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-xs text-gray-200">
               {displayName}
             </span>
           )}
@@ -86,7 +93,7 @@ export default function Navbar() {
             type="button"
             onClick={handleLogout}
             disabled={loading}
-            className="rounded-full border border-red-500/70 bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-red-500 disabled:opacity-60"
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white hover:border-white/20 hover:bg-white/[0.08] disabled:opacity-60"
           >
             {loading ? 'Signing out…' : 'Log out'}
           </button>
@@ -95,4 +102,3 @@ export default function Navbar() {
     </nav>
   )
 }
-

@@ -130,78 +130,84 @@ export default function DepartmentBrowser({ departments }: Props) {
 
   return (
     <section className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
-            Departments
-          </h2>
-          <h3 className="mt-1 text-xl font-semibold tracking-tight text-white">
-            Your STEM home base
-          </h3>
-          <div className="mt-2 h-[2px] w-10 rounded-full bg-red-600" />
-          {loadingFavorites ? (
-            <p className="mt-2 text-xs text-gray-500">
-              Loading your favorites…
+      <div className="app-panel rounded-[1.75rem] p-5 md:p-6">
+        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-gray-500">
+              Departments
             </p>
-          ) : (
-            <p className="mt-2 text-xs text-gray-500">
-              Favorite departments you care about, then dive into courses and
-              notes.
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+              Find the right academic lane fast.
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-gray-400">
+              Search by code or name, pin the departments you revisit, and keep
+              the course tree compact instead of noisy.
             </p>
-          )}
-          {favoritesError && (
-            <p className="mt-2 text-xs text-red-400">
-              Error loading favorites: {favoritesError}
-            </p>
-          )}
-        </div>
+            {loadingFavorites ? (
+              <p className="mt-3 text-xs text-gray-500">
+                Syncing your favorites…
+              </p>
+            ) : null}
+            {favoritesError && (
+              <p className="mt-3 text-xs text-red-400">
+                Error loading favorites: {favoritesError}
+              </p>
+            )}
+          </div>
 
-        <div className="w-full sm:w-72">
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by code or name…"
-            className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder-gray-500 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] focus:border-red-500 focus:outline-none"
-          />
+          <div className="w-full md:w-80">
+            <label className="mb-2 block font-mono text-[10px] uppercase tracking-[0.22em] text-gray-500">
+              Search
+            </label>
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="CMSC, math, biology…"
+              className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-gray-500 outline-none focus:border-[#5f8cff]/70 focus:bg-white/[0.06]"
+            />
+          </div>
         </div>
       </div>
 
       {favorites.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-gray-200">
-              Your favorites
-            </h4>
+            <h3 className="text-sm font-medium text-gray-200">
+              Starred departments
+            </h3>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gray-500">
+              {favorites.length} pinned
+            </p>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {favorites.map((dept) => {
               const isFavorite = favoriteIds.has(dept.id)
 
               return (
                 <div
                   key={dept.id}
-                  className="group flex min-w-[220px] flex-col justify-between rounded-2xl border border-white/5 bg-white/5 px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.7)] backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-red-500/70 hover:bg-white/10"
+                  className="app-panel rounded-[1.5rem] p-4 hover:-translate-y-0.5 hover:border-white/15 hover:bg-white/[0.05]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <Link
                       href={`/${encodeURIComponent(dept.code)}`}
                       className="flex-1"
                     >
-                      <p className="text-sm font-semibold tracking-tight text-white">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#9db6ff]">
                         {dept.code}
                       </p>
-                      <p className="mt-1 text-xs text-gray-400 line-clamp-2">
+                      <p className="mt-2 text-base font-semibold tracking-[-0.03em] text-white">
                         {dept.name}
                       </p>
                     </Link>
                     <button
                       type="button"
                       onClick={() => void handleToggleFavorite(dept.id)}
-                      className={`ml-1 rounded-full border px-2 py-1 text-xs transition ${
+                      className={`rounded-full border px-2.5 py-1 text-xs ${
                         isFavorite
-                          ? 'border-red-500 bg-red-600/20 text-red-400'
-                          : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-red-500 hover:text-red-400'
+                          ? 'border-[#5f8cff]/35 bg-[#5f8cff]/14 text-[#b7c8ff]'
+                          : 'border-white/10 bg-white/[0.04] text-gray-400 hover:border-white/20 hover:text-white'
                       }`}
                       aria-label={
                         isFavorite
@@ -209,12 +215,15 @@ export default function DepartmentBrowser({ departments }: Props) {
                           : 'Add to favorites'
                       }
                     >
-                      {isFavorite ? '♥' : '♡'}
+                      {isFavorite ? 'Saved' : 'Save'}
                     </button>
                   </div>
-                  <p className="mt-3 text-[11px] text-gray-400">
-                    View courses →
-                  </p>
+                  <div className="mt-5 flex items-center justify-between text-xs text-gray-500">
+                    <span>Jump into course list</span>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
+                      Open
+                    </span>
+                  </div>
                 </div>
               )
             })}
@@ -224,42 +233,42 @@ export default function DepartmentBrowser({ departments }: Props) {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-gray-200">
+          <h3 className="text-sm font-medium text-gray-200">
             All departments
-          </h4>
-          <p className="text-xs text-gray-500">
+          </h3>
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-gray-500">
             {departments.length} total
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {others.map((dept) => {
             const isFavorite = favoriteIds.has(dept.id)
 
             return (
               <div
                 key={dept.id}
-                className="group flex flex-col justify-between rounded-2xl border border-white/5 bg-white/5 px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.6)] backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-red-500/70 hover:bg-white/10"
+                className="app-panel rounded-[1.5rem] p-4 hover:-translate-y-0.5 hover:border-white/15 hover:bg-white/[0.05]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <Link
                     href={`/${encodeURIComponent(dept.code)}`}
                     className="flex-1"
                   >
-                    <p className="text-sm font-semibold tracking-tight text-white">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-gray-500">
                       {dept.code}
                     </p>
-                    <p className="mt-1 text-xs text-gray-400 line-clamp-2">
+                    <p className="mt-2 text-base font-semibold tracking-[-0.03em] text-white">
                       {dept.name}
                     </p>
                   </Link>
                   <button
                     type="button"
                     onClick={() => void handleToggleFavorite(dept.id)}
-                    className={`ml-1 rounded-full border px-2 py-1 text-xs transition ${
+                    className={`rounded-full border px-2.5 py-1 text-xs ${
                       isFavorite
-                        ? 'border-red-500 bg-red-600/20 text-red-400'
-                        : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-red-500 hover:text-red-400'
+                        ? 'border-[#5f8cff]/35 bg-[#5f8cff]/14 text-[#b7c8ff]'
+                        : 'border-white/10 bg-white/[0.04] text-gray-400 hover:border-white/20 hover:text-white'
                     }`}
                     aria-label={
                       isFavorite
@@ -267,18 +276,21 @@ export default function DepartmentBrowser({ departments }: Props) {
                         : 'Add to favorites'
                     }
                   >
-                    {isFavorite ? '♥' : '♡'}
+                    {isFavorite ? 'Saved' : 'Save'}
                   </button>
                 </div>
-                <p className="mt-3 text-[11px] text-gray-400">
-                  View courses →
-                </p>
+                <div className="mt-5 flex items-center justify-between text-xs text-gray-500">
+                  <span>Browse courses</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
+                    Open
+                  </span>
+                </div>
               </div>
             )
           })}
 
           {favorites.length === 0 && others.length === 0 && (
-            <p className="col-span-full text-sm text-gray-400">
+            <p className="col-span-full rounded-[1.5rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-6 text-sm text-gray-400">
               No departments match your search.
             </p>
           )}
@@ -287,4 +299,3 @@ export default function DepartmentBrowser({ departments }: Props) {
     </section>
   )
 }
-
