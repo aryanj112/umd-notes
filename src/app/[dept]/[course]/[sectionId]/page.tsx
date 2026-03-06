@@ -83,26 +83,25 @@ export default async function SectionNotesPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <header className="mt-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
+      <header className="app-panel rounded-[1.75rem] px-6 py-7 md:px-8">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-gray-500">
           {department.code} · {course.code}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white md:text-3xl">
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-white md:text-4xl">
           {course.name}
         </h1>
-        <div className="mt-2 h-[2px] w-10 rounded-full bg-red-600" />
-        <p className="mt-3 text-sm text-gray-300">
+        <p className="mt-4 text-sm text-gray-300">
           {section.professor}
           {section.semester ? ` · ${section.semester}` : ''}
         </p>
         {section.description && (
-          <p className="mt-2 text-sm text-gray-400">
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-gray-400">
             {section.description}
           </p>
         )}
       </header>
 
-      <NotesClient sectionId={section.id} userId={user.id} />
+      <NotesClient sectionId={section.id} />
     </div>
   )
 }

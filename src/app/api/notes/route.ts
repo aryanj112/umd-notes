@@ -32,6 +32,7 @@ export async function POST(request: Request) {
   const sectionId = formData.get('sectionId')
   const title = formData.get('title')
   const file = formData.get('file')
+  const prompt = formData.get('prompt')
 
   if (typeof sectionId !== 'string' || !sectionId.trim()) {
     return NextResponse.json({ error: 'sectionId is required' }, { status: 400 })
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
       fileUrl: publicUrl,
       title: title.trim(),
       mimeType: file.type,
+      customPrompt: typeof prompt === 'string' ? prompt : undefined,
     })
   } catch (error) {
     console.error('Failed to generate study HTML:', error)

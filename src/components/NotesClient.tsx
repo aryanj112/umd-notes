@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { DEFAULT_STUDY_PROMPT } from '@/lib/notes/html'
 
 type NoteRow = {
   id: string
@@ -14,17 +15,17 @@ type NoteRow = {
 
 type NotesClientProps = {
   sectionId: string
-  userId: string
 }
 
-type ExplanationMap = Record<string, string>
-
-const stripHtml = (html: string) =>
-  html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+type VoteRow = {
+  note_id: string
+  value: number
+}
 
 export default function NotesClient({ sectionId }: NotesClientProps) {
   const supabase = createClient()
 
+  const [userId, setUserId] = useState<string | null>(null)
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [loadingNotes, setLoadingNotes] = useState(true)
   const [notesError, setNotesError] = useState<string | null>(null)
@@ -32,20 +33,25 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [sectionNumber, setSectionNumber] = useState('')
   const [name, setName] = useState('')
+  const [prompt, setPrompt] = useState(DEFAULT_STUDY_PROMPT)
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const [upvotingId, setUpvotingId] = useState<string | null>(null)
-
-  const [explainingId, setExplainingId] = useState<string | null>(null)
-  const [explanations, setExplanations] = useState<ExplanationMap>({})
-  const [explainError, setExplainError] = useState<string | null>(null)
+  const [voteState, setVoteState] = useState<Record<string, -1 | 0 | 1>>({})
+  const [votingId, setVotingId] = useState<string | null>(null)
+  const [voteError, setVoteError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadNotes = async () => {
       setLoadingNotes(true)
       setNotesError(null)
+      setVoteError(null)
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      setUserId(user?.id ?? null)
 
       const { data, error } = await supabase
         .from('notes')
@@ -59,6 +65,25 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
         setNotes([])
       } else {
         setNotes(data ?? [])
+      }
+
+      if (user && (data?.length ?? 0) > 0) {
+        const { data: votes, error: voteLoadError } = await supabase
+          .from('note_votes')
+          .select('note_id, value')
+          .in(
+            'note_id',
+            (data ?? []).map((note) => note.id),
+          )
+          .returns<VoteRow[]>()
+
+        if (!voteLoadError) {
+          setVoteState(
+            Object.fromEntries(
+              (votes ?? []).map((vote) => [vote.note_id, vote.value as -1 | 0 | 1]),
+            ),
+          )
+        }
       }
 
       setLoadingNotes(false)
@@ -108,6 +133,7 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
       formData.set('sectionId', sectionId)
       formData.set('title', title)
       formData.set('file', file)
+      formData.set('prompt', prompt)
 
       const response = await fetch('/api/notes', {
         method: 'POST',
@@ -128,6 +154,7 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
 
       setSectionNumber('')
       setName('')
+      setPrompt(DEFAULT_STUDY_PROMPT)
       setFile(null)
       setModalOpen(false)
     } catch (err) {
@@ -137,74 +164,79 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
     }
   }
 
-  const handleUpvote = async (noteId: string) => {
+  const handleVote = async (noteId: string, nextValue: -1 | 1) => {
+    if (!userId) {
+      setVoteError('You must be logged in to vote on notes.')
+      return
+    }
+
     const target = notes.find((note) => note.id === noteId)
     if (!target) {
       return
     }
 
-    const nextUpvotes = (target.upvotes ?? 0) + 1
+    setVoteError(null)
+    setVotingId(noteId)
 
-    setUpvotingId(noteId)
+    const currentValue = voteState[noteId] ?? 0
+    const finalValue = currentValue === nextValue ? 0 : nextValue
+    const nextUpvotes = (target.upvotes ?? 0) + (finalValue - currentValue)
 
     try {
-      const { error } = await supabase
+      if (finalValue === 0) {
+        const { error: deleteError } = await supabase
+          .from('note_votes')
+          .delete()
+          .eq('note_id', noteId)
+
+        if (deleteError) {
+          throw deleteError
+        }
+      } else if (currentValue === 0) {
+        const { error: insertError } = await supabase.from('note_votes').insert({
+          user_id: userId,
+          note_id: noteId,
+          value: finalValue,
+        })
+
+        if (insertError) {
+          throw insertError
+        }
+      } else {
+        const { error: updateVoteError } = await supabase
+          .from('note_votes')
+          .update({ value: finalValue })
+          .eq('note_id', noteId)
+
+        if (updateVoteError) {
+          throw updateVoteError
+        }
+      }
+
+      const { error: updateError } = await supabase
         .from('notes')
         .update({ upvotes: nextUpvotes })
         .eq('id', noteId)
 
-      if (!error) {
-        setNotes((current) =>
-          current.map((note) =>
-            note.id === noteId ? { ...note, upvotes: nextUpvotes } : note,
-          ),
-        )
-      }
-    } finally {
-      setUpvotingId(null)
-    }
-  }
-
-  const handleExplain = async (noteId: string, noteContent: string | null) => {
-    if (!noteContent) {
-      return
-    }
-
-    setExplainingId(noteId)
-    setExplainError(null)
-
-    try {
-      const response = await fetch('/api/explain', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({ content: stripHtml(noteContent) }),
-      })
-
-      if (!response.ok) {
-        const text = await response.text()
-        setExplainError(
-          text || 'Failed to generate explanation. Please try again.',
-        )
-        setExplainingId(null)
-        return
+      if (updateError) {
+        throw updateError
       }
 
-      const html = await response.text()
-
-      setExplanations((current) => ({
+      setVoteState((current) => ({
         ...current,
-        [noteId]: html,
+        [noteId]: finalValue,
       }))
+      setNotes((current) =>
+        current.map((note) =>
+          note.id === noteId ? { ...note, upvotes: nextUpvotes } : note,
+        ),
+      )
     } catch (error) {
-      setExplainError(
-        error instanceof Error
-          ? error.message
-          : 'Unexpected error generating explanation',
+      setVoteError(
+        error instanceof Error ? error.message : 'Failed to update vote',
       )
     } finally {
-      setExplainingId(null)
+      setVotingId(null)
     }
   }
 
@@ -212,14 +244,14 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
     <section className="mb-10">
       <div className="mb-4 flex items-center justify-between gap-4">
         <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
-          Sections
+          Notes
         </h2>
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className="rounded-full bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500"
+          className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm font-semibold text-white hover:border-white/20 hover:bg-white/[0.08]"
         >
-          Add section
+          Add note
         </button>
       </div>
 
@@ -233,13 +265,19 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
         </p>
       )}
 
+      {voteError && (
+        <p className="mb-4 rounded-lg border border-red-700 bg-red-950 px-4 py-3 text-sm text-red-200">
+          Vote error: {voteError}
+        </p>
+      )}
+
       {!loadingNotes && !notesError && notes.length === 0 && (
         <div className="rounded-xl border border-dashed border-gray-700 bg-gray-900/40 px-6 py-10 text-center">
             <h3 className="text-lg font-medium text-white">
-              No sections yet
+              No notes yet
           </h3>
           <p className="mt-2 text-sm text-gray-400">
-            Be the first to add a numbered section with files for this class.
+            Be the first to add a note file and turn it into a study page.
           </p>
         </div>
       )}
@@ -249,28 +287,46 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
           {orderedNotes.map((note) => (
             <article
               key={note.id}
-              className="flex flex-col rounded-2xl border border-white/5 bg-white/5 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+              className="app-panel flex flex-col rounded-2xl p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold tracking-tight text-white">
                     {note.title}
                   </h3>
-                  {note.content && (
-                    <p className="mt-2 line-clamp-4 text-sm text-gray-300">
-                      {stripHtml(note.content)}
-                    </p>
-                  )}
+                  <p className="mt-2 text-xs text-gray-500">
+                    Generated study page saved for this note.
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleUpvote(note.id)}
-                  disabled={upvotingId === note.id}
-                  className="flex flex-col items-center rounded-lg border border-gray-700 bg-gray-800 px-2 py-1 text-xs font-medium text-gray-200 transition hover:border-red-500 hover:text-red-400 disabled:opacity-60"
-                >
-                  <span>▲</span>
-                  <span className="mt-0.5">{note.upvotes ?? 0}</span>
-                </button>
+                <div className="flex flex-col items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleVote(note.id, 1)}
+                    disabled={votingId === note.id}
+                    className={`rounded-lg px-2 py-1 text-xs ${
+                      (voteState[note.id] ?? 0) === 1
+                        ? 'bg-[#5f8cff]/18 text-[#b7c8ff]'
+                        : 'text-gray-400 hover:bg-white/[0.06] hover:text-white'
+                    } disabled:opacity-60`}
+                  >
+                    ▲
+                  </button>
+                  <span className="text-xs font-medium text-gray-200">
+                    {note.upvotes ?? 0}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleVote(note.id, -1)}
+                    disabled={votingId === note.id}
+                    className={`rounded-lg px-2 py-1 text-xs ${
+                      (voteState[note.id] ?? 0) === -1
+                        ? 'bg-white/[0.1] text-white'
+                        : 'text-gray-400 hover:bg-white/[0.06] hover:text-white'
+                    } disabled:opacity-60`}
+                  >
+                    ▼
+                  </button>
+                </div>
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-3">
@@ -279,7 +335,7 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
                     href={`/api/notes/${encodeURIComponent(note.id)}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs font-medium text-red-400 hover:text-red-300"
+                    className="text-xs font-medium text-[#9db6ff] hover:text-white"
                   >
                     Open study page
                   </a>
@@ -293,37 +349,11 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
                       Source file
                     </a>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => void handleExplain(note.id, note.content)}
-                    disabled={explainingId === note.id || !note.content}
-                    className="text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-60"
-                  >
-                    {explainingId === note.id
-                      ? 'Explaining with AI…'
-                      : 'Summarize'}
-                  </button>
                 </div>
                 <p className="text-xs text-gray-500">
                   {new Date(note.created_at).toLocaleString()}
                 </p>
               </div>
-
-              {explainError && explainingId === null && (
-                <p className="mt-2 text-xs text-red-400">
-                  {explainError}
-                </p>
-              )}
-
-              {explanations[note.id] && (
-                <div className="mt-3 rounded-lg border border-gray-700 bg-gray-900/80 p-3 text-sm text-gray-100">
-                  <div
-                    className="prose prose-invert max-w-none prose-p:mb-2 prose-ul:list-disc prose-ul:pl-5 prose-li:my-1 prose-code:rounded prose-code:bg-gray-800 prose-code:px-1 prose-code:py-0.5"
-                    // HTML is generated by our own API with a safe, constrained prompt
-                    dangerouslySetInnerHTML={{ __html: explanations[note.id] }}
-                  />
-                </div>
-              )}
             </article>
           ))}
         </div>
@@ -333,11 +363,11 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-gray-900 p-6 shadow-xl">
             <h2 className="text-lg font-semibold text-white">
-              Add section
+              Add note
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              Use a simple number like 1 or 1.1, give it a name, and upload a
-              file for this class section.
+              Upload a class note and optionally steer how the AI turns it into
+              a richer study page.
             </p>
 
             <form onSubmit={handleCreateNote} className="mt-4 space-y-4">
@@ -352,10 +382,10 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
                     onChange={(event) => setSectionNumber(event.target.value)}
                     required
                     placeholder="1.1"
-                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-red-500 focus:outline-none"
-                  />
-                </div>
-                <div className="flex-1">
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-[#5f8cff]/70 focus:outline-none"
+                />
+              </div>
+              <div className="flex-1">
                   <label className="mb-1 block text-xs text-gray-300">
                     Name
                   </label>
@@ -365,9 +395,24 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
                     onChange={(event) => setName(event.target.value)}
                     required
                     placeholder="Limits and continuity"
-                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-red-500 focus:outline-none"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-[#5f8cff]/70 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs text-gray-300">
+                  Generation prompt
+                </label>
+                <textarea
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  rows={9}
+                  className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-[#5f8cff]/70 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Edit the full base prompt directly before upload.
+                </p>
               </div>
 
               <div>
@@ -380,7 +425,7 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
                     setFile(event.target.files?.[0] ?? null)
                   }
                   required
-                  className="w-full text-sm text-gray-300 file:mr-3 file:rounded-full file:border-0 file:bg-red-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white file:hover:bg-red-500"
+                  className="w-full text-sm text-gray-300 file:mr-3 file:rounded-full file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white file:hover:bg-white/15"
                 />
               </div>
 
@@ -405,9 +450,9 @@ export default function NotesClient({ sectionId }: NotesClientProps) {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-full bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500 disabled:opacity-60"
+                  className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm font-semibold text-white hover:border-white/20 hover:bg-white/[0.08] disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Save section'}
+                  {saving ? 'Saving…' : 'Save note'}
                 </button>
               </div>
             </form>

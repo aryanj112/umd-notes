@@ -1,5 +1,17 @@
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 
+export const DEFAULT_STUDY_PROMPT =
+  'Turn this uploaded class note into a polished study webpage for UMD students. ' +
+  'Return only HTML markup for the article body, not markdown and not a full document. ' +
+  'Use semantic tags like section, h1, h2, h3, p, ul, ol, li, table, blockquote, code, pre, figure, figcaption, and div. ' +
+  'Build something expansive and interactive-looking, not a thin article. ' +
+  'Include distinct sections such as: what it is, why it is useful, core ideas, terminology, worked examples if present, common mistakes, and an answer key. ' +
+  'If possible from the material, include a generator or practice builder students can use conceptually, such as a step-by-step recipe, formula builder, checklist, or input/output table. ' +
+  'If possible, include a quiz section with at least 3 questions and a separate revealed answer key section. ' +
+  'If the source supports it, include tables, comparison blocks, challenge prompts, and alternate ways to think about the topic. ' +
+  'Keep the original material accurate. If the file is sparse, clearly mark uncertainty or missing details instead of inventing content. ' +
+  'Vary the section order, examples, visual framing, and pacing so two generations of the same file do not feel identical.'
+
 type OpenAIResponse = {
   output_text?: string
   output?: Array<{
@@ -54,16 +66,25 @@ export async function generateStudyHtmlFromFile({
   fileUrl,
   title,
   mimeType,
+  customPrompt,
 }: {
   fileUrl: string
   title: string
   mimeType: string
+  customPrompt?: string
 }) {
   const apiKey = process.env.OPENAI_API_KEY
 
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not configured')
   }
+
+  const generationVariant = Math.floor(Math.random() * 1_000_000)
+  const basePrompt = customPrompt?.trim() || DEFAULT_STUDY_PROMPT
+  const fullPrompt =
+    `${basePrompt} ` +
+    `The note title is "${title}" and the file MIME type is "${mimeType || 'unknown'}". ` +
+    `Use variation seed ${generationVariant} to choose a different structure and different examples than prior generations when possible.`
 
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: 'POST',
@@ -79,13 +100,7 @@ export async function generateStudyHtmlFromFile({
           content: [
             {
               type: 'input_text',
-              text:
-                `Turn this uploaded class note into a polished study webpage for UMD students.` +
-                ` Return only HTML markup for the article body, not markdown and not a full document.` +
-                ` Use semantic tags like section, h1, h2, h3, p, ul, ol, li, table, blockquote, code, pre.` +
-                ` Include a concise title section, key ideas, definitions, worked examples if present, and a short recap.` +
-                ` Keep the original material accurate. If the file is sparse, say what is missing instead of inventing content.` +
-                ` The note title is "${title}" and the file MIME type is "${mimeType || 'unknown'}".`,
+              text: fullPrompt,
             },
             {
               type: 'input_file',
@@ -110,40 +125,6 @@ export async function generateStudyHtmlFromFile({
   }
 
   return generated
-}
-
-export async function generateExplanationHtml(content: string) {
-  const apiKey = process.env.OPENAI_API_KEY
-
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is not configured')
-  }
-
-  const response = await fetch(OPENAI_RESPONSES_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-5-mini',
-      input: `Explain these study notes clearly for a UMD student. Return only safe HTML fragments using p, strong, ul, li, code, and h3 tags.\n\n${content}`,
-    }),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`OpenAI request failed (${response.status}): ${errorText}`)
-  }
-
-  const data = (await response.json()) as OpenAIResponse
-  const explanation = sanitizeGeneratedHtml(extractOutputText(data))
-
-  if (!explanation) {
-    throw new Error('OpenAI did not return an explanation')
-  }
-
-  return explanation
 }
 
 export function buildStudyPageDocument(title: string, bodyHtml: string) {
